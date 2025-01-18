@@ -103,30 +103,24 @@ int ExecuteAssembly(SAFEARRAY* rawAssembly, SAFEARRAY* parameters, LPCWCHAR appD
     return retVal.lVal;
 }
 
-int main(void) {
+int wmain(int argc, wchar_t** argv) {
+
+    if (argc < 2) {
+        wprintf(L"%s AssemblyPath Arguments...\n", argv[0]);
+        return 0;
+    }
+
     LPCWCHAR appDomainName = L"TEST";
+    LPCWCHAR assemblyPath  = argv[1];
 
-    LPCWCHAR assemblyPath = L"Printer.exe";
-
-    HANDLE hFile = CreateFileW(
-        assemblyPath,           // File name
-        GENERIC_READ,           // Desired access
-        FILE_SHARE_READ,        // Share mode
-        NULL,                   // Security attributes
-        OPEN_EXISTING,          // Open existing file
-        FILE_ATTRIBUTE_NORMAL,  // File attributes
-        NULL                    // Template file
-    );
-
+    HANDLE hFile = CreateFileW(assemblyPath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hFile == INVALID_HANDLE_VALUE) {
-        printf("OpenFile Error: %ul\n", GetLastError());
+        wprintf(L"CreateFileW ERROR: %ul\n", GetLastError());
         return 1;
     }
 
     LARGE_INTEGER fileSize = { 0 };
     GetFileSizeEx(hFile, &fileSize);
-
-
 
     SAFEARRAYBOUND bounds[1];
     bounds[0].cElements = fileSize.QuadPart;
@@ -138,39 +132,25 @@ int main(void) {
     CHECK_HRESULT(SafeArrayAccessData(pSafeArray, &pvData));
 
     DWORD dwBytesRead = 0;
-    if (ReadFile(hFile, pvData, fileSize.QuadPart, &dwBytesRead, NULL) == FALSE) {
-        printf("ReadFile Error: %ul\n", GetLastError());
+    if (ReadFile(hFile, pvData, fileSize.QuadPart, &dwBytesRead, NULL) == FALSE || dwBytesRead != fileSize.QuadPart) {
+        wprintf(L"ReadFile ERROR: %ul\n", GetLastError());
         return 1;
     }
 
-    //CHECK_HRESULT(SafeArrayUnaccessData(pSafeArray));
-    //CHECK_HRESULT(SafeArrayDestroy(pSafeArray));
-
     CloseHandle(hFile);
-
-
-    const wchar_t* parameters[] = {
-    L"Hello World",
-    L"20",
-    L"10",
-    };
 
     // EntryPoint.Invoke(new string[] { argv_1, argv_2, argv_3, ... } )
     //params = newArguments(parameters.size(), parameters);
     VARIANT vtPsa  = { 0 };
     vtPsa.vt = (VT_ARRAY | VT_BSTR);
-    vtPsa.parray = SafeArrayCreateVector(VT_BSTR, 0, ArraySize(parameters));
-    for (LONG i = 0; i < ArraySize(parameters); i++) {
-        SafeArrayPutElement(vtPsa.parray, &i, SysAllocString(parameters[i]));
+    vtPsa.parray = SafeArrayCreateVector(VT_BSTR, 0, argc - 2);
+    for (LONG i = 0; i < argc - 2; i++) {
+        SafeArrayPutElement(vtPsa.parray, &i, SysAllocString(argv[i + 2]));
     }
     SAFEARRAY* params = SafeArrayCreateVector(VT_VARIANT, 0, 1);
     LONG idx = 0;
     SafeArrayPutElement(params, &idx, &vtPsa);
 
-
-
     ExecuteAssembly(pSafeArray, params, appDomainName);
-
-
     return 0;
 }
