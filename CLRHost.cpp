@@ -137,10 +137,12 @@ int wmain(int argc, wchar_t** argv) {
         return 1;
     }
 
+    CHECK_HRESULT(SafeArrayUnaccessData(pSafeArray));
+
     CloseHandle(hFile);
 
     // EntryPoint.Invoke(new string[] { argv_1, argv_2, argv_3, ... } )
-    //params = newArguments(parameters.size(), parameters);
+
     VARIANT vtPsa  = { 0 };
     vtPsa.vt = (VT_ARRAY | VT_BSTR);
     vtPsa.parray = SafeArrayCreateVector(VT_BSTR, 0, argc - 2);
