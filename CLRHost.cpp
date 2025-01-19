@@ -26,13 +26,15 @@ int ExecuteAssembly(SAFEARRAY* rawAssembly, SAFEARRAY* parameters, LPCWCHAR appD
     Microsoft::WRL::ComPtr<IEnumUnknown>    pRuntimeEnum;
     Microsoft::WRL::ComPtr<IUnknown>        pUnkown;
     Microsoft::WRL::ComPtr<ICLRRuntimeInfo> pRuntimeInfo;
-    Microsoft::WRL::ComPtr<ICorRuntimeHost> pRuntimeHost;
+    Microsoft::WRL::ComPtr<ICLRRuntimeHost> pCLRRuntimeHost;
+    Microsoft::WRL::ComPtr<ICorRuntimeHost> pCorRuntimeHost;
     Microsoft::WRL::ComPtr<IUnknown>        pAppDomainThunk;
 
     mscorlib::_MethodInfoPtr pMethodInfo      = NULL;
     mscorlib::_AppDomainPtr  pCustomAppDomain = NULL;
     mscorlib::_AssemblyPtr   pAssembly        = NULL;
 
+    // Get ICLRMetaHost instance
     CHECK_HRESULT(CLRCreateInstance(CLSID_CLRMetaHost, IID_PPV_ARGS(&pMetaHost)));
 
     CHECK_HRESULT(pMetaHost->EnumerateLoadedRuntimes(GetCurrentProcess(), &pRuntimeEnum));
@@ -78,16 +80,19 @@ int ExecuteAssembly(SAFEARRAY* rawAssembly, SAFEARRAY* parameters, LPCWCHAR appD
         }
     }
 
+    // Get ICLRRuntimeHost instance
+    CHECK_HRESULT(pRuntimeInfo->GetInterface(CLSID_CLRRuntimeHost, IID_PPV_ARGS(&pCLRRuntimeHost)));
+
+    if (!CLRLoaded) {
+        CHECK_HRESULT(pCLRRuntimeHost->Start());
+    }
+
     // Load the CLR into the current process and return a runtime interface 
     // pointer. ICorRuntimeHost and ICLRRuntimeHost are the two CLR hosting  
     // interfaces supported by CLR 4.0.
-    CHECK_HRESULT(pRuntimeInfo->GetInterface(CLSID_CorRuntimeHost, IID_PPV_ARGS(&pRuntimeHost)));
+    CHECK_HRESULT(pRuntimeInfo->GetInterface(CLSID_CorRuntimeHost, IID_PPV_ARGS(&pCorRuntimeHost)));
 
-    if (!CLRLoaded) {
-        CHECK_HRESULT(pRuntimeHost->Start());
-    }
-
-    CHECK_HRESULT(pRuntimeHost->CreateDomain(appDomainName, NULL, &pAppDomainThunk));
+    CHECK_HRESULT(pCorRuntimeHost->CreateDomain(appDomainName, NULL, &pAppDomainThunk));
 
     CHECK_HRESULT(pAppDomainThunk->QueryInterface(IID_PPV_ARGS(&pCustomAppDomain)));
 
@@ -98,9 +103,9 @@ int ExecuteAssembly(SAFEARRAY* rawAssembly, SAFEARRAY* parameters, LPCWCHAR appD
     VARIANT retVal = { 0 };
     CHECK_HRESULT(pMethodInfo->Invoke_3(VARIANT(), parameters, &retVal));
 
-    CHECK_HRESULT(pRuntimeHost->UnloadDomain(pCustomAppDomain));
+    CHECK_HRESULT(pCorRuntimeHost->UnloadDomain(pCustomAppDomain));
 
-    return retVal.lVal;
+    return 0;
 }
 
 int wmain(int argc, wchar_t** argv) {
@@ -123,7 +128,7 @@ int wmain(int argc, wchar_t** argv) {
     GetFileSizeEx(hFile, &fileSize);
 
     SAFEARRAYBOUND bounds[1];
-    bounds[0].cElements = fileSize.QuadPart;
+    bounds[0].cElements = static_cast<ULONG>(fileSize.QuadPart);
     bounds[0].lLbound = 0;
 
     SAFEARRAY* pSafeArray = SafeArrayCreate(VT_UI1, 1, bounds);
@@ -132,7 +137,7 @@ int wmain(int argc, wchar_t** argv) {
     CHECK_HRESULT(SafeArrayAccessData(pSafeArray, &pvData));
 
     DWORD dwBytesRead = 0;
-    if (ReadFile(hFile, pvData, fileSize.QuadPart, &dwBytesRead, NULL) == FALSE || dwBytesRead != fileSize.QuadPart) {
+    if (ReadFile(hFile, pvData, static_cast<DWORD>(fileSize.QuadPart), &dwBytesRead, NULL) == FALSE || dwBytesRead != fileSize.QuadPart) {
         wprintf(L"ReadFile ERROR: %ul\n", GetLastError());
         return 1;
     }
