@@ -45,6 +45,7 @@ int ExecuteAssembly(SAFEARRAY* rawAssembly, SAFEARRAY* parameters, LPCWCHAR appD
     while (pRuntimeEnum->Next(1, &pUnkown, NULL) == S_OK) {
 
         if (HRESULT hr = pUnkown->QueryInterface(IID_PPV_ARGS(&pRuntimeInfo)); FAILED(hr)) {
+            pUnkown->Release();
             continue;
         }
 
@@ -52,14 +53,20 @@ int ExecuteAssembly(SAFEARRAY* rawAssembly, SAFEARRAY* parameters, LPCWCHAR appD
         DWORD   cchVersion        = ArraySize(wszVersion);
 
         if (HRESULT hr = pRuntimeInfo->GetVersionString(wszVersion, &cchVersion); FAILED(hr)) {
+            pRuntimeInfo->Release();
+            pUnkown->Release();
             continue;
         }
 
-        if (lstrcmpW(wszVersion, sz_runtimeVersion) == 0) {
-            CLRLoaded = TRUE;
-            break;
+        if (lstrcmpW(wszVersion, sz_runtimeVersion) != 0) {
+            pRuntimeInfo->Release();
+            pUnkown->Release();
+            continue;
         }
 
+        CLRLoaded = TRUE;
+        pUnkown->Release();
+        break;
     }
 
     if (!CLRLoaded) {
