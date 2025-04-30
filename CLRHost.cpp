@@ -40,36 +40,20 @@ int ExecuteAssembly(SAFEARRAY* rawAssembly, SAFEARRAY* parameters, LPCWCHAR appD
     CHECK_HRESULT(pMetaHost->EnumerateLoadedRuntimes(GetCurrentProcess(), &pRuntimeEnum));
 
     // Check if CLR is already loaded.
-    BOOL CLRLoaded = FALSE;
+    BOOL    bCLRLoaded         = FALSE;
     LPCWSTR sz_runtimeVersion = L"v4.0.30319";
-    while (pRuntimeEnum->Next(1, &pUnkown, NULL) == S_OK) {
-
-        if (HRESULT hr = pUnkown->QueryInterface(IID_PPV_ARGS(&pRuntimeInfo)); FAILED(hr)) {
-            pUnkown->Release();
-            continue;
+    WCHAR   wszVersion[64]    = { 0 };
+    DWORD   cchVersion        = ArraySize(wszVersion);
+    
+    while (pRuntimeEnum->Next(1, &pUnkown, NULL) == S_OK && !bCLRLoaded) {
+        if (HRESULT hr = pUnkown.As(&pRuntimeInfo); SUCCEEDED(hr)) {
+            if (HRESULT hr = pRuntimeInfo->GetVersionString(wszVersion, &cchVersion); SUCCEEDED(hr)) {
+                bCLRLoaded = (lstrcmp(wszVersion, sz_runtimeVersion) == 0);
+            }
         }
-
-        WCHAR   wszVersion[64]    = { 0 };
-        DWORD   cchVersion        = ArraySize(wszVersion);
-
-        if (HRESULT hr = pRuntimeInfo->GetVersionString(wszVersion, &cchVersion); FAILED(hr)) {
-            pRuntimeInfo->Release();
-            pUnkown->Release();
-            continue;
-        }
-
-        if (lstrcmpW(wszVersion, sz_runtimeVersion) != 0) {
-            pRuntimeInfo->Release();
-            pUnkown->Release();
-            continue;
-        }
-
-        CLRLoaded = TRUE;
-        pUnkown->Release();
-        break;
     }
 
-    if (!CLRLoaded) {
+    if (!bCLRLoaded) {
         // Get the ICLRRuntimeInfo corresponding to a particular CLR version. It 
         // supersedes CorBindToRuntimeEx with STARTUP_LOADER_SAFEMODE.
         CHECK_HRESULT(pMetaHost->GetRuntime(sz_runtimeVersion, IID_PPV_ARGS(&pRuntimeInfo)));
@@ -90,7 +74,7 @@ int ExecuteAssembly(SAFEARRAY* rawAssembly, SAFEARRAY* parameters, LPCWCHAR appD
     // Get ICLRRuntimeHost instance
     CHECK_HRESULT(pRuntimeInfo->GetInterface(CLSID_CLRRuntimeHost, IID_PPV_ARGS(&pCLRRuntimeHost)));
 
-    if (!CLRLoaded) {
+    if (!bCLRLoaded) {
         CHECK_HRESULT(pCLRRuntimeHost->Start());
     }
 
